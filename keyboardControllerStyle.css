@@ -1,0 +1,84 @@
+.keyboardContainer {
+  display: flex;
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--col04);
+  background: #151515;
+  padding: 1rem;
+}
+
+.octaveContainer {
+  position: relative;
+  flex: 1 0 0;
+  min-width: 330px;
+  height: 230px;
+}
+
+.whiteKeyContainer {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.whiteKey {
+  position: relative;
+  flex: 1;
+  border: 1px solid #555;
+  border-right: 0;
+  background: #eee;
+  color: #111;
+  cursor: pointer;
+}
+
+.whiteKey:last-child {
+  border-right: 1px solid #555;
+}
+
+.whiteKey:hover {
+  background: #ddd;
+}
+
+.whiteKey.activeKey {
+  background: #aaa;
+  transform: translateY(3px);
+}
+
+.blackKeyContainer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.blackKey {
+  position: absolute;
+  top: 0;
+  width: 8%;
+  height: 58%;
+  border: 1px solid #111;
+  background: #151515;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.blackKey.activeKey {
+  background: #555;
+  transform: translateY(3px);
+}
+
+/* Place the five black keys between the white keys. */
+.blackKey:nth-child(1) { left: 10.7%; }
+.blackKey:nth-child(2) { left: 25%; }
+.blackKey:nth-child(3) { left: 53.6%; }
+.blackKey:nth-child(4) { left: 67.9%; }
+.blackKey:nth-child(5) { left: 82.1%; }
+
+@media (max-width: 800px) {
+  .keyboardContainer {
+    padding: 0.5rem;
+  }
+
+  .octaveContainer {
+    min-width: 300px;
+  }
+}

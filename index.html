@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0">
+  <title>Cooperative Spatial Synth 01</title>
+
+  <link rel="stylesheet" href="reset.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="keyboardControllerStyle.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.3.5/Tone.js"
+    integrity="sha512-F1myjNkIKU5XJtOs1HXRo/zOjiUsABgFEEGKLx/riwK82jRThZFebEnfH2Wo9eeC+iC1Nwwnn9Vj6OGq+r7rQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="main.js" defer></script>
+  <script src="keyboardController.js" defer></script>
+</head>
+
+<body>
+
+  <dialog id="intro-dialog">
+    <p>This is an early draft of a cooperative browser-based synthesizer.</p>
+    <p>Drag the two spatial controls and use the keyboard below to explore the sound.</p>
+    <button id="intro-dialog-close-button" class="dialogButton" autofocus>Start</button>
+  </dialog>
+
+  <dialog id="info-dialog">
+    <p>Player A and Player B share the same spatial sound field. The position of each control changes the sound, while the keyboard provides direct pitch input.</p>
+    <button id="info-dialog-close-button" class="dialogButton">OK</button>
+  </dialog>
+
+  <main>
+
+    <section class="infoSection">
+      <div>
+        <p class="eyebrow">COOPERATIVE SYNTHESIZER / DRAFT 01</p>
+        <h1>Shared Sound Space</h1>
+      </div>
+      <button id="info-button">i</button>
+    </section>
+
+    <section class="spatialSection">
+      <div class="sectionHeading">
+        <h2>Spatial Input</h2>
+        <p>Drag the circles to change the sound.</p>
+      </div>
+
+      <div class="spatialLayout">
+
+        <div id="spatial-field" class="spatialField">
+
+          <div class="spatialAxis xAxis">
+            <span>Dark</span>
+            <span>Bright</span>
+          </div>
+
+          <div class="spatialAxis yAxis">
+            <span>High</span>
+            <span>Low</span>
+          </div>
+
+          <div id="connection-line" class="connectionLine"></div>
+
+          <div id="player-a" class="spatialPlayer playerA" tabindex="0" aria-label="Player A spatial control">
+            <span>A</span>
+          </div>
+
+          <div id="player-b" class="spatialPlayer playerB" tabindex="0" aria-label="Player B spatial control">
+            <span>B</span>
+          </div>
+
+          <div class="centrePoint"></div>
+        </div>
+
+        <aside class="controlPanel">
+
+          <div class="componentBox">
+            <div class="controlHeading">
+              <h3>Output</h3>
+              <span id="volume-feedback">-8 dB</span>
+            </div>
+
+            <label for="volume-slider">Volume</label>
+            <div class="sliderRow">
+              <span>Min</span>
+              <input type="range" id="volume-slider" min="-32" max="0" value="-8">
+              <span>Max</span>
+            </div>
+          </div>
+
+          <div class="componentBox">
+            <h3>Waveform</h3>
+
+            <div class="waveformGrid">
+              <label>
+                <input type="radio" class="waveformSelect" name="waveform" value="sine" checked>
+                <span class="waveShape sineShape"></span>
+                Sine
+              </label>
+
+              <label>
+                <input type="radio" class="waveformSelect" name="waveform" value="square">
+                <span class="waveShape squareShape"></span>
+                Square
+              </label>
+
+              <label>
+                <input type="radio" class="waveformSelect" name="waveform" value="triangle">
+                <span class="waveShape triangleShape"></span>
+                Triangle
+              </label>
+
+              <label>
+                <input type="radio" class="waveformSelect" name="waveform" value="sawtooth">
+                <span class="waveShape sawShape"></span>
+                Saw
+              </label>
+            </div>
+          </div>
+
+          <div class="componentBox">
+            <div class="controlHeading">
+              <h3>Spatial mix</h3>
+              <span id="distance-feedback">Far</span>
+            </div>
+            <div class="meter">
+              <div id="distance-meter"></div>
+            </div>
+            <p class="smallText">Moving A and B closer increases their shared sound.</p>
+          </div>
+
+        </aside>
+      </div>
+    </section>
+
+    <section class="keyboardSection">
+      <div class="sectionHeading">
+        <h2>Keyboard</h2>
+        <p>Press a key to play a different pitch.</p>
+      </div>
+
+      <div class="keyboardContainer">
+
+        <div class="octaveContainer" data-octave="3">
+          <div class="whiteKeyContainer">
+            <button class="whiteKey" data-note="c" aria-label="C3"></button>
+            <button class="whiteKey" data-note="d" aria-label="D3"></button>
+            <button class="whiteKey" data-note="e" aria-label="E3"></button>
+            <button class="whiteKey" data-note="f" aria-label="F3"></button>
+            <button class="whiteKey" data-note="g" aria-label="G3"></button>
+            <button class="whiteKey" data-note="a" aria-label="A3"></button>
+            <button class="whiteKey" data-note="b" aria-label="B3"></button>
+          </div>
+
+          <div class="blackKeyContainer">
+            <button class="blackKey" data-note="c#"></button>
+            <button class="blackKey" data-note="d#"></button>
+            <button class="blackKey" data-note="f#"></button>
+            <button class="blackKey" data-note="g#"></button>
+            <button class="blackKey" data-note="a#"></button>
+          </div>
+        </div>
+
+        <div class="octaveContainer" data-octave="4">
+          <div class="whiteKeyContainer">
+            <button class="whiteKey" data-note="c" aria-label="C4"></button>
+            <button class="whiteKey" data-note="d" aria-label="D4"></button>
+            <button class="whiteKey" data-note="e" aria-label="E4"></button>
+            <button class="whiteKey" data-note="f" aria-label="F4"></button>
+            <button class="whiteKey" data-note="g" aria-label="G4"></button>
+            <button class="whiteKey" data-note="a" aria-label="A4"></button>
+            <button class="whiteKey" data-note="b" aria-label="B4"></button>
+          </div>
+
+          <div class="blackKeyContainer">
+            <button class="blackKey" data-note="c#"></button>
+            <button class="blackKey" data-note="d#"></button>
+            <button class="blackKey" data-note="f#"></button>
+            <button class="blackKey" data-note="g#"></button>
+            <button class="blackKey" data-note="a#"></button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>
