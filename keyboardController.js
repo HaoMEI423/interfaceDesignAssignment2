@@ -1,116 +1,61 @@
 //////////
 // Keyboard controller
-// Based on the structure demonstrated in the RMIT instrument example.
+// Mouse + computer keyboard input, following the course example's
+// separate keyboard-controller approach.
 //////////
 
-const allKeys = Array.from(document.getElementsByClassName("whiteKey"))
-  .concat(Array.from(document.getElementsByClassName("blackKey")));
+const keys = Array.from(document.querySelectorAll(".whiteKey, .blackKey"));
+const activeComputerKeys = new Map();
 
-const keyCodeToNote = {
-  a: { note: "c", octave: "3" },
-  w: { note: "c#", octave: "3" },
-  s: { note: "d", octave: "3" },
-  e: { note: "d#", octave: "3" },
-  d: { note: "e", octave: "3" },
-  f: { note: "f", octave: "3" },
-  t: { note: "f#", octave: "3" },
-  g: { note: "g", octave: "3" },
-  y: { note: "g#", octave: "3" },
-  h: { note: "a", octave: "3" },
-  u: { note: "a#", octave: "3" },
-  j: { note: "b", octave: "3" },
-  k: { note: "c", octave: "4" },
-  o: { note: "c#", octave: "4" },
-  l: { note: "d", octave: "4" },
-  p: { note: "d#", octave: "4" }
+const keyMap = {
+  a: "C3", w: "C#3", s: "D3", e: "D#3", d: "E3", f: "F3", t: "F#3",
+  g: "G3", y: "G#3", h: "A3", u: "A#3", j: "B3", k: "C4", o: "C#4",
+  l: "D4", p: "D#4", ";": "E4", "]": "F4"
 };
 
-function playKey(key) {
-  const note = key.dataset.note;
-  const octave = key.parentElement.parentElement.dataset.octave;
-
-  synth.triggerAttack(note + octave);
-  key.classList.add("activeKey");
+function keyNote(key) {
+  const octave = key.closest(".octaveContainer").dataset.octave;
+  return `${key.dataset.note}${octave}`;
 }
 
-function releaseKey(key) {
-  const note = key.dataset.note;
-  const octave = key.parentElement.parentElement.dataset.octave;
-
-  synth.triggerRelease(note + octave);
-  key.classList.remove("activeKey");
+function findKey(note) {
+  return keys.find(key => keyNote(key) === note);
 }
 
-allKeys.forEach((key) => {
+async function playNote(note, keyElement) {
+  await ensureAudio();
+  keyboardSynth.triggerAttack(note);
+  if (keyElement) keyElement.classList.add("activeKey");
+}
 
-  key.addEventListener("mousedown", async () => {
-    await Tone.start();
-    playKey(key);
-  });
+function releaseNote(note, keyElement) {
+  keyboardSynth.triggerRelease(note);
+  if (keyElement) keyElement.classList.remove("activeKey");
+}
 
-  key.addEventListener("mouseup", () => {
-    releaseKey(key);
-  });
-
-  key.addEventListener("mouseleave", (event) => {
-    if (event.buttons === 1) {
-      releaseKey(key);
-    }
-  });
-
-  key.addEventListener("mouseenter", (event) => {
-    if (event.buttons !== 1) return;
-    playKey(key);
-  });
-
-  key.addEventListener("touchstart", async (event) => {
+keys.forEach(key => {
+  key.addEventListener("pointerdown", async event => {
     event.preventDefault();
-    await Tone.start();
-    playKey(key);
-  }, { passive: false });
-
-  key.addEventListener("touchend", () => {
-    releaseKey(key);
+    key.setPointerCapture(event.pointerId);
+    await playNote(keyNote(key), key);
   });
+  key.addEventListener("pointerup", () => releaseNote(keyNote(key), key));
+  key.addEventListener("pointercancel", () => releaseNote(keyNote(key), key));
 });
 
-window.addEventListener("keydown", async (event) => {
-
+window.addEventListener("keydown", async event => {
   if (event.repeat) return;
-  if (!(event.key in keyCodeToNote)) return;
-
-  await Tone.start();
-
-  const note = keyCodeToNote[event.key].note;
-  const octave = keyCodeToNote[event.key].octave;
-
-  synth.triggerAttack(note + octave);
-
-  allKeys.forEach((key) => {
-    if (
-      key.dataset.note === note &&
-      key.parentElement.parentElement.dataset.octave === octave
-    ) {
-      key.classList.add("activeKey");
-    }
-  });
+  const note = keyMap[event.key.toLowerCase()];
+  if (!note) return;
+  event.preventDefault();
+  const key = findKey(note);
+  await playNote(note, key);
+  activeComputerKeys.set(event.key.toLowerCase(), { note, key });
 });
 
-window.addEventListener("keyup", (event) => {
-
-  if (!(event.key in keyCodeToNote)) return;
-
-  const note = keyCodeToNote[event.key].note;
-  const octave = keyCodeToNote[event.key].octave;
-
-  synth.triggerRelease(note + octave);
-
-  allKeys.forEach((key) => {
-    if (
-      key.dataset.note === note &&
-      key.parentElement.parentElement.dataset.octave === octave
-    ) {
-      key.classList.remove("activeKey");
-    }
-  });
+window.addEventListener("keyup", event => {
+  const item = activeComputerKeys.get(event.key.toLowerCase());
+  if (!item) return;
+  releaseNote(item.note, item.key);
+  activeComputerKeys.delete(event.key.toLowerCase());
 });

@@ -1,252 +1,166 @@
 //////////
-// Cooperative Spatial Synth
-// Draft 01
+// Cooperative Spatial Synth — Draft 03
+// Spatial input + volume + waveform + keyboard
 //////////
 
-const defaultPreset = {
-  volume: -8,
-  oscType: "sine"
-};
-
-//////////
-// Find elements
-//////////
-
-const introDialog = document.getElementById("intro-dialog");
-const introDialogCloseButton = document.getElementById("intro-dialog-close-button");
-
-const infoButton = document.getElementById("info-button");
-const infoDialog = document.getElementById("info-dialog");
-const infoDialogCloseButton = document.getElementById("info-dialog-close-button");
-
+const spatialBall = document.getElementById("spatialBall");
+const spatialField = document.getElementById("spatial-field");
 const volumeSlider = document.getElementById("volume-slider");
 const volumeFeedback = document.getElementById("volume-feedback");
-const waveformInputs = Array.from(document.getElementsByClassName("waveformSelect"));
+const waveformInputs = Array.from(document.querySelectorAll(".waveformSelect"));
+const waveformFeedback = document.getElementById("waveform-feedback");
+const positionFeedback = document.getElementById("position-feedback");
+const pitchFeedback = document.getElementById("pitch-feedback");
+const timbreFeedback = document.getElementById("timbre-feedback");
 
-const spatialField = document.getElementById("spatial-field");
-const playerA = document.getElementById("player-a");
-const playerB = document.getElementById("player-b");
-const connectionLine = document.getElementById("connection-line");
+// One polyphonic instrument handles the keyboard so several notes can overlap.
+const keyboardSynth = new Tone.PolySynth(Tone.Synth, {
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.015, decay: 0.15, sustain: 0.55, release: 0.45 }
+});
 
-const distanceFeedback = document.getElementById("distance-feedback");
-const distanceMeter = document.getElementById("distance-meter");
+// The spatial ball has its own voice so dragging it can continuously change pitch.
+const spatialSynth = new Tone.Synth({
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.03, decay: 0.12, sustain: 0.7, release: 0.35 }
+});
 
-//////////
-// Tone setup
-//////////
+const masterVolume = new Tone.Volume(-8).toDestination();
+const filter = new Tone.Filter(5000, "lowpass");
+keyboardSynth.connect(masterVolume);
+spatialSynth.connect(filter);
+filter.connect(masterVolume);
 
-const synth = new Tone.PolySynth(Tone.Synth);
-const filter = new Tone.Filter(12000, "lowpass");
-const reverb = new Tone.Reverb({ decay: 2.2, wet: 0.12 });
+const spatialState = { x: 0.72, y: 0.28 };
+let spatialDragging = false;
+let audioStarted = false;
 
-synth.chain(filter, reverb, Tone.Destination);
+function clamp(value) { return Math.max(0, Math.min(1, value)); }
 
-//////////
-// Spatial state
-//////////
-
-const spatialState = {
-  A: { x: 0.25, y: 0.55 },
-  B: { x: 0.75, y: 0.45 }
-};
-
-let activePlayer = null;
-
-function clamp(value, min = 0, max = 1) {
-  return Math.max(min, Math.min(max, value));
+async function ensureAudio() {
+  if (!audioStarted) {
+    await Tone.start();
+    audioStarted = true;
+  }
 }
 
-function updatePlayerPosition(element, player) {
-  element.style.left = `${player.x * 100}%`;
-  element.style.top = `${player.y * 100}%`;
+function noteFromSpatialY(y) {
+  // A simple scale keeps the spatial instrument playable without music theory.
+  const notes = ["C3","D3","E3","F3","G3","A3","B3","C4","D4","E4","F4","G4","A4","B4","C5"];
+  return notes[Math.round((1 - y) * (notes.length - 1))];
 }
 
-function updateSpatialFeedback() {
-  updatePlayerPosition(playerA, spatialState.A);
-  updatePlayerPosition(playerB, spatialState.B);
+function updateSpatialSound() {
+  const x = spatialState.x;
+  const y = spatialState.y;
+  const note = noteFromSpatialY(y);
 
-  const dx = spatialState.A.x - spatialState.B.x;
-  const dy = spatialState.A.y - spatialState.B.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  const closeness = 1 - clamp(distance / Math.sqrt(2));
+  // X axis: left = dark, right = bright.
+  const filterFrequency = 350 + x * 11000;
+  filter.frequency.rampTo(filterFrequency, 0.06);
 
-  // Draw a line between the two spatial inputs.
-  const rect = spatialField.getBoundingClientRect();
-  const ax = spatialState.A.x * rect.width;
-  const ay = spatialState.A.y * rect.height;
-  const bx = spatialState.B.x * rect.width;
-  const by = spatialState.B.y * rect.height;
-
-  const lineLength = Math.sqrt((bx - ax) ** 2 + (by - ay) ** 2);
-  const lineAngle = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
-
-  connectionLine.style.left = `${ax}px`;
-  connectionLine.style.top = `${ay}px`;
-  connectionLine.style.width = `${lineLength}px`;
-  connectionLine.style.transform = `rotate(${lineAngle}deg)`;
-  connectionLine.style.opacity = `${0.2 + closeness * 0.8}`;
-
-  distanceMeter.style.width = `${closeness * 100}%`;
-
-  if (closeness > 0.72) {
-    distanceFeedback.textContent = "Together";
-  } else if (closeness > 0.38) {
-    distanceFeedback.textContent = "Near";
-  } else {
-    distanceFeedback.textContent = "Far";
+  // Y axis: bottom = low, top = high.
+  if (spatialDragging) {
+    spatialSynth.frequency.rampTo(Tone.Frequency(note).toFrequency(), 0.06);
   }
 
-  // Spatial input controls timbre:
-  // horizontal position changes the filter frequency.
-  const averageX = (spatialState.A.x + spatialState.B.x) / 2;
-  const filterFrequency = 500 + averageX * 11500;
-  filter.frequency.rampTo(filterFrequency, 0.08);
+  spatialBall.style.left = `${x * 100}%`;
+  spatialBall.style.top = `${y * 100}%`;
 
-  // Spatial relationship controls shared reverb.
-  reverb.wet.rampTo(0.05 + closeness * 0.55, 0.1);
+  const horizontal = x < 0.38 ? "Dark" : x > 0.62 ? "Bright" : "Balanced";
+  const vertical = y < 0.38 ? "High" : y > 0.62 ? "Low" : "Middle";
+  const combined = vertical === "Middle" && horizontal === "Balanced" ? "Centre" : `${vertical} / ${horizontal}`;
+
+  positionFeedback.textContent = combined;
+  pitchFeedback.textContent = vertical;
+  timbreFeedback.textContent = horizontal;
 }
 
-function getSpatialPoint(event) {
+function spatialPoint(event) {
   const rect = spatialField.getBoundingClientRect();
-
   return {
     x: clamp((event.clientX - rect.left) / rect.width),
     y: clamp((event.clientY - rect.top) / rect.height)
   };
 }
 
-function startSpatialNote() {
-  if (activePlayer === "A") {
-    synth.triggerAttack("C4");
-  }
-
-  if (activePlayer === "B") {
-    synth.triggerAttack("G3");
-  }
-}
-
-function stopSpatialNote() {
-  synth.releaseAll();
-}
-
-function moveSpatialPlayer(player, event) {
-  spatialState[player] = getSpatialPoint(event);
-  updateSpatialFeedback();
-}
-
-function setupSpatialInput(player, element) {
-
-  element.addEventListener("pointerdown", async (event) => {
-    event.preventDefault();
-
-    await Tone.start();
-
-    activePlayer = player;
-    element.setPointerCapture(event.pointerId);
-    element.classList.add("activeKey");
-
-    moveSpatialPlayer(player, event);
-    startSpatialNote();
-  });
-
-  element.addEventListener("pointermove", (event) => {
-    if (!element.hasPointerCapture(event.pointerId)) return;
-
-    moveSpatialPlayer(player, event);
-
-    // Move the pitch continuously with vertical spatial position.
-    const noteRange = player === "A"
-      ? ["C3", "D3", "E3", "G3", "A3", "C4", "D4", "E4", "G4", "A4"]
-      : ["G2", "A2", "C3", "D3", "E3", "G3", "A3", "C4", "D4", "E4"];
-
-    const index = Math.round((1 - spatialState[player].y) * (noteRange.length - 1));
-    const note = noteRange[index];
-
-    synth.setNote(note);
-  });
-
-  element.addEventListener("pointerup", () => {
-    element.classList.remove("activeKey");
-    activePlayer = null;
-    stopSpatialNote();
-  });
-
-  element.addEventListener("pointercancel", () => {
-    element.classList.remove("activeKey");
-    activePlayer = null;
-    stopSpatialNote();
-  });
-}
-
-setupSpatialInput("A", playerA);
-setupSpatialInput("B", playerB);
-
-//////////
-// Volume
-//////////
-
-function changeVolume(newVolume) {
-
-  if (newVolume === volumeSlider.min) {
-    synth.volume.value = -128;
-  } else {
-    synth.volume.value = Number(newVolume);
-  }
-
-  volumeFeedback.textContent = `${newVolume} dB`;
-}
-
-volumeSlider.addEventListener("input", (e) => {
-  changeVolume(e.target.value);
+spatialBall.addEventListener("pointerdown", async (event) => {
+  event.preventDefault();
+  await ensureAudio();
+  spatialDragging = true;
+  spatialBall.setPointerCapture(event.pointerId);
+  const point = spatialPoint(event);
+  spatialState.x = point.x;
+  spatialState.y = point.y;
+  spatialSynth.triggerAttack(noteFromSpatialY(spatialState.y));
+  spatialBall.classList.add("activeKey");
+  updateSpatialSound();
 });
 
-//////////
-// Waveform
-//////////
-
-function changeOscillatorType(newOscType) {
-  synth.set({
-    oscillator: {
-      type: newOscType
-    }
-  });
-}
-
-waveformInputs.forEach((input) => {
-  input.addEventListener("change", (e) => {
-    changeOscillatorType(e.target.value);
-  });
+spatialBall.addEventListener("pointermove", (event) => {
+  if (!spatialDragging) return;
+  const point = spatialPoint(event);
+  spatialState.x = point.x;
+  spatialState.y = point.y;
+  updateSpatialSound();
 });
 
-//////////
-// Keyboard initialisation
-//////////
-
-function toneInit() {
-  synth.volume.value = defaultPreset.volume;
-  changeVolume(defaultPreset.volume);
-  changeOscillatorType(defaultPreset.oscType);
-
-  keyboardControlInit();
-  updateSpatialFeedback();
+function releaseSpatial() {
+  if (!spatialDragging) return;
+  spatialDragging = false;
+  spatialSynth.triggerRelease();
+  spatialBall.classList.remove("activeKey");
 }
+spatialBall.addEventListener("pointerup", releaseSpatial);
+spatialBall.addEventListener("pointercancel", releaseSpatial);
 
-//////////
-// Dialogs
-//////////
+// Clicking anywhere in the spatial field moves the ball there and starts sound.
+spatialField.addEventListener("pointerdown", async (event) => {
+  if (event.target === spatialBall) return;
+  await ensureAudio();
+  const point = spatialPoint(event);
+  spatialState.x = point.x;
+  spatialState.y = point.y;
+  updateSpatialSound();
+  spatialDragging = true;
+  spatialSynth.triggerAttack(noteFromSpatialY(spatialState.y));
+  spatialBall.setPointerCapture?.(event.pointerId);
+});
 
+spatialField.addEventListener("pointermove", (event) => {
+  if (!spatialDragging) return;
+  const point = spatialPoint(event);
+  spatialState.x = point.x;
+  spatialState.y = point.y;
+  updateSpatialSound();
+});
+
+spatialField.addEventListener("pointerup", releaseSpatial);
+spatialField.addEventListener("pointercancel", releaseSpatial);
+
+// Volume is routed through one master Volume node so it affects keyboard + spatial sound.
+volumeSlider.addEventListener("input", (event) => {
+  const value = Number(event.target.value);
+  masterVolume.volume.rampTo(value, 0.05);
+  volumeFeedback.textContent = `${value} dB`;
+});
+
+function setWaveform(type) {
+  keyboardSynth.set({ oscillator: { type } });
+  spatialSynth.oscillator.type = type;
+  waveformFeedback.textContent = type === "sawtooth" ? "Saw" : type[0].toUpperCase() + type.slice(1);
+}
+waveformInputs.forEach(input => input.addEventListener("change", event => setWaveform(event.target.value)));
+
+// Start with the requested high + bright position.
+updateSpatialSound();
+
+const introDialog = document.getElementById("intro-dialog");
+const introClose = document.getElementById("intro-dialog-close-button");
+const infoDialog = document.getElementById("info-dialog");
+const infoButton = document.getElementById("info-button");
+const infoClose = document.getElementById("info-dialog-close-button");
 introDialog.showModal();
-
-introDialogCloseButton.addEventListener("click", () => {
-  introDialog.close();
-});
-
-introDialog.addEventListener("close", toneInit);
-
-infoButton.addEventListener("click", () => {
-  infoDialog.showModal();
-});
-
-infoDialogCloseButton.addEventListener("click", () => {
-  infoDialog.close();
-});
+introClose.addEventListener("click", async () => { await ensureAudio(); introDialog.close(); });
+infoButton.addEventListener("click", () => infoDialog.showModal());
+infoClose.addEventListener("click", () => infoDialog.close());
