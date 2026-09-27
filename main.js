@@ -1,6 +1,6 @@
 //////////
-// Cooperative Spatial Synth — Draft 03
-// Spatial input + volume + waveform + keyboard
+// Cooperative Spatial Synth — prototype
+// Shared audio engine: spatial input + volume + waveform + keyboard
 //////////
 
 const spatialBall = document.getElementById("spatialBall");
@@ -13,13 +13,11 @@ const positionFeedback = document.getElementById("position-feedback");
 const pitchFeedback = document.getElementById("pitch-feedback");
 const timbreFeedback = document.getElementById("timbre-feedback");
 
-// One polyphonic instrument handles the keyboard so several notes can overlap.
 const keyboardSynth = new Tone.PolySynth(Tone.Synth, {
   oscillator: { type: "sine" },
   envelope: { attack: 0.015, decay: 0.15, sustain: 0.55, release: 0.45 }
 });
 
-// The spatial ball has its own voice so dragging it can continuously change pitch.
 const spatialSynth = new Tone.Synth({
   oscillator: { type: "sine" },
   envelope: { attack: 0.03, decay: 0.12, sustain: 0.7, release: 0.35 }
@@ -27,8 +25,8 @@ const spatialSynth = new Tone.Synth({
 
 const masterVolume = new Tone.Volume(-8).toDestination();
 const filter = new Tone.Filter(5000, "lowpass");
-keyboardSynth.connect(masterVolume);
 spatialSynth.connect(filter);
+keyboardSynth.connect(filter);
 filter.connect(masterVolume);
 
 const spatialState = { x: 0.72, y: 0.28 };
@@ -44,38 +42,6 @@ async function ensureAudio() {
   }
 }
 
-function noteFromSpatialY(y) {
-  // A simple scale keeps the spatial instrument playable without music theory.
-  const notes = ["C3","D3","E3","F3","G3","A3","B3","C4","D4","E4","F4","G4","A4","B4","C5"];
-  return notes[Math.round((1 - y) * (notes.length - 1))];
-}
-
-function updateSpatialSound() {
-  const x = spatialState.x;
-  const y = spatialState.y;
-  const note = noteFromSpatialY(y);
-
-  // X axis: left = dark, right = bright.
-  const filterFrequency = 350 + x * 11000;
-  filter.frequency.rampTo(filterFrequency, 0.06);
-
-  // Y axis: bottom = low, top = high.
-  if (spatialDragging) {
-    spatialSynth.frequency.rampTo(Tone.Frequency(note).toFrequency(), 0.06);
-  }
-
-  spatialBall.style.left = `${x * 100}%`;
-  spatialBall.style.top = `${y * 100}%`;
-
-  const horizontal = x < 0.38 ? "Dark" : x > 0.62 ? "Bright" : "Balanced";
-  const vertical = y < 0.38 ? "High" : y > 0.62 ? "Low" : "Middle";
-  const combined = vertical === "Middle" && horizontal === "Balanced" ? "Centre" : `${vertical} / ${horizontal}`;
-
-  positionFeedback.textContent = combined;
-  pitchFeedback.textContent = vertical;
-  timbreFeedback.textContent = horizontal;
-}
-
 function spatialPoint(event) {
   const rect = spatialField.getBoundingClientRect();
   return {
@@ -84,26 +50,38 @@ function spatialPoint(event) {
   };
 }
 
-spatialBall.addEventListener("pointerdown", async (event) => {
-  event.preventDefault();
-  await ensureAudio();
-  spatialDragging = true;
-  spatialBall.setPointerCapture(event.pointerId);
-  const point = spatialPoint(event);
-  spatialState.x = point.x;
-  spatialState.y = point.y;
-  spatialSynth.triggerAttack(noteFromSpatialY(spatialState.y));
-  spatialBall.classList.add("activeKey");
-  updateSpatialSound();
-});
 
-spatialBall.addEventListener("pointermove", (event) => {
-  if (!spatialDragging) return;
-  const point = spatialPoint(event);
-  spatialState.x = point.x;
-  spatialState.y = point.y;
-  updateSpatialSound();
-});
+function noteFromSpatialPosition(x, y) {
+  // A 2D landscape: both axes contribute to the resulting pitch.
+  const notes = ["C3","D3","E3","F3","G3","A3","B3","C4","D4","E4","F4","G4","A4","B4","C5"];
+  const combined = clamp((1 - y) * 0.62 + x * 0.38);
+  return notes[Math.round(combined * (notes.length - 1))];
+}
+function updateSpatialSound(active) {
+  const x = spatialState.x;
+  const y = spatialState.y;
+  const note = noteFromSpatialPosition(x, y);
+  const filterFrequency = 300 + (x * 0.72 + (1 - y) * 0.28) * 11300;
+  filter.frequency.rampTo(filterFrequency, 0.06);
+  filter.Q.rampTo(0.7 + (1 - y) * 10, 0.06);
+  if (active) spatialSynth.frequency.rampTo(Tone.Frequency(note).toFrequency(), 0.06);
+  updateBallPosition();
+  const horizontal = x < 0.38 ? "Dark" : x > 0.62 ? "Bright" : "Balanced";
+  const vertical = y < 0.38 ? "High" : y > 0.62 ? "Low" : "Middle";
+  const combined = `${vertical} / ${horizontal}`;
+  updateSpatialFeedback(vertical, horizontal, combined);
+}
+
+function updateBallPosition() {
+  spatialBall.style.left = `${spatialState.x * 100}%`;
+  spatialBall.style.top = `${spatialState.y * 100}%`;
+}
+
+function updateSpatialFeedback(vertical, horizontal, combined) {
+  positionFeedback.textContent = combined;
+  pitchFeedback.textContent = vertical;
+  timbreFeedback.textContent = horizontal;
+}
 
 function releaseSpatial() {
   if (!spatialDragging) return;
@@ -111,35 +89,56 @@ function releaseSpatial() {
   spatialSynth.triggerRelease();
   spatialBall.classList.remove("activeKey");
 }
-spatialBall.addEventListener("pointerup", releaseSpatial);
-spatialBall.addEventListener("pointercancel", releaseSpatial);
 
-// Clicking anywhere in the spatial field moves the ball there and starts sound.
-spatialField.addEventListener("pointerdown", async (event) => {
-  if (event.target === spatialBall) return;
+async function beginSpatial(event) {
+  event.preventDefault();
   await ensureAudio();
+  spatialDragging = true;
+  spatialBall.setPointerCapture?.(event.pointerId);
   const point = spatialPoint(event);
   spatialState.x = point.x;
   spatialState.y = point.y;
-  updateSpatialSound();
-  spatialDragging = true;
-  spatialSynth.triggerAttack(noteFromSpatialY(spatialState.y));
-  spatialBall.setPointerCapture?.(event.pointerId);
-});
+  updateSpatialSound(true);
+  spatialSynth.triggerAttack(noteFromSpatialPosition(spatialState.x, spatialState.y));
+  spatialBall.classList.add("activeKey");
+}
 
-spatialField.addEventListener("pointermove", (event) => {
+spatialBall.addEventListener("pointerdown", beginSpatial);
+spatialBall.addEventListener("pointermove", event => {
   if (!spatialDragging) return;
   const point = spatialPoint(event);
   spatialState.x = point.x;
   spatialState.y = point.y;
-  updateSpatialSound();
+  updateSpatialSound(true);
 });
+spatialBall.addEventListener("pointerup", releaseSpatial);
+spatialBall.addEventListener("pointercancel", releaseSpatial);
+window.addEventListener("pointerup", releaseSpatial);
 
+spatialField.addEventListener("pointerdown", async event => {
+  if (event.target === spatialBall) return;
+  event.preventDefault();
+  await ensureAudio();
+  spatialField.setPointerCapture?.(event.pointerId);
+  spatialDragging = true;
+  const point = spatialPoint(event);
+  spatialState.x = point.x;
+  spatialState.y = point.y;
+  updateSpatialSound(true);
+  spatialSynth.triggerAttack(noteFromSpatialPosition(spatialState.x, spatialState.y));
+  spatialBall.classList.add("activeKey");
+});
+spatialField.addEventListener("pointermove", event => {
+  if (!spatialDragging) return;
+  const point = spatialPoint(event);
+  spatialState.x = point.x;
+  spatialState.y = point.y;
+  updateSpatialSound(true);
+});
 spatialField.addEventListener("pointerup", releaseSpatial);
 spatialField.addEventListener("pointercancel", releaseSpatial);
 
-// Volume is routed through one master Volume node so it affects keyboard + spatial sound.
-volumeSlider.addEventListener("input", (event) => {
+volumeSlider.addEventListener("input", event => {
   const value = Number(event.target.value);
   masterVolume.volume.rampTo(value, 0.05);
   volumeFeedback.textContent = `${value} dB`;
@@ -152,8 +151,8 @@ function setWaveform(type) {
 }
 waveformInputs.forEach(input => input.addEventListener("change", event => setWaveform(event.target.value)));
 
-// Start with the requested high + bright position.
-updateSpatialSound();
+// Default spatial position.
+updateSpatialSound(false);
 
 const introDialog = document.getElementById("intro-dialog");
 const introClose = document.getElementById("intro-dialog-close-button");

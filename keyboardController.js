@@ -59,3 +59,8 @@ window.addEventListener("keyup", event => {
   releaseNote(item.note, item.key);
   activeComputerKeys.delete(event.key.toLowerCase());
 });
+
+window.addEventListener("blur", () => {
+  activeComputerKeys.forEach(({ note, key }) => releaseNote(note, key));
+  activeComputerKeys.clear();
+});
